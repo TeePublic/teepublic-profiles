@@ -1,0 +1,49 @@
+# Input Sources for RudderStack Profiles
+# Defines the source tables and their identity mappings for ID stitching
+
+inputs:
+  - name: f_orders
+    app_defaults:
+      table: WAREHOUSE.ANALYTICS.F_ORDERS_FILTERED_TP
+      occurred_at_col: order_completed_at_est
+      ids:
+        - select: "customer_id"
+          type: user_id
+          entity: user
+    where: is_manual_order = false
+
+  - name: f_order_items
+    app_defaults:
+      table: WAREHOUSE.ANALYTICS.F_ORDER_ITEMS_FILTERED_TP
+      occurred_at_col: order_completed_at_est
+      ids:
+        - select: "customer_id"
+          type: user_id
+          entity: user
+
+  # RudderStack identifies tables - used as source for filtered_identifies SQL model
+  # ID extraction is defined in sql_models.yaml, not here
+  - name: identifies_js
+    app_defaults:
+      table: rudderstack.marketplace_javascript_production.identifies
+      occurred_at_col: timestamp
+
+  - name: identifies_ruby
+    app_defaults:
+      table: rudderstack.marketplace_ruby_production.identifies
+      occurred_at_col: timestamp
+
+  # Dimension tables for enriching order items
+  - name: dim_designs
+    app_defaults:
+      table: WAREHOUSE.ANALYTICS.DIM_DESIGNS
+    contract:
+      is_optional: false
+      is_event_stream: false
+
+  - name: dim_products
+    app_defaults:
+      table: WAREHOUSE.ANALYTICS.DIM_PRODUCTS
+    contract:
+      is_optional: false
+      is_event_stream: false

@@ -1,0 +1,34 @@
+# RudderStack Profiles output
+/output/
+
+# Logs
+/logs/
+*.log
+
+# Generated visualization and audit outputs
+/graph_outputs/
+/table_outputs/
+/lib/
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Claude Code settings (local only)
+.claude/

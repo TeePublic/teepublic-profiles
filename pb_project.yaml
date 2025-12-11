@@ -1,0 +1,33 @@
+# RudderStack Profiles Project Configuration
+name: ecommerce_profiles
+schema_version: 93
+connection: <your_connection_name>  # Update this - see README.md Setup section
+model_folders:
+  - models
+
+# ID types used for identity stitching
+id_types:
+  - name: user_id
+    filters:
+      - type: exclude
+        value: ""
+  - name: anonymous_id
+    # Filtering handled in models/sql_models.yaml (filtered_identifies model)
+    # - Empty strings filtered via: anonymous_id != ''
+    # - Template placeholders filtered via: LEFT(anonymous_id, 2) != '#{'
+    # - Super-connectors (>5 user_ids) filtered via: HAVING COUNT(DISTINCT normalized_user_id) > 5
+
+# Entity definitions
+entities:
+  - name: user
+    id_stitcher: models/user_id_stitcher
+    id_types:
+      - user_id
+      - anonymous_id
+    feature_views:
+      using_ids:
+        - id: user_id
+          name: with_customer_id
+
+python_requirements:
+  - profiles-rudderstack==0.24.*

@@ -1,0 +1,198 @@
+# Profiles Models and Features
+# For reference: https://www.rudderstack.com/docs/profiles/overview
+
+models:
+  - name: user_id_stitcher
+    model_type: id_stitcher
+    model_spec:
+      entity_key: user
+      edge_sources:
+        - from: inputs/f_orders
+        - from: inputs/f_order_items
+        - from: models/filtered_identifies
+
+var_groups:
+  - name: user_order_features
+    entity_key: user
+    vars:
+      # === Order Count Features ===
+      - entity_var:
+          name: total_orders
+          select: count(distinct order_id)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Total number of completed orders
+
+      - entity_var:
+          name: total_order_items
+          select: sum(item_count)
+          from: inputs/f_order_items
+          where: was_transacted_line_item = true
+          description: Total number of items purchased
+
+      # === Revenue Features ===
+      - entity_var:
+          name: lifetime_revenue_usd
+          select: sum(total_revenue_usd)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Total lifetime revenue in USD
+
+      - entity_var:
+          name: lifetime_sales_subtotal_usd
+          select: sum(sales_subtotal_usd)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Total lifetime sales subtotal in USD
+
+      - entity_var:
+          name: avg_order_value_usd
+          select: avg(total_revenue_usd)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Average order value in USD
+
+      # === Timing Features ===
+      - entity_var:
+          name: first_order_date
+          select: min(order_completed_at_est)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Date of first completed order
+
+      - entity_var:
+          name: last_order_date
+          select: max(order_completed_at_est)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Date of most recent completed order
+
+      - entity_var:
+          name: days_since_last_order
+          select: datediff(day, max(order_completed_at_est), current_date())
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Number of days since last order
+
+      # === Customer Behavior Features ===
+      - entity_var:
+          name: is_repeat_buyer
+          select: case when count(distinct order_id) > 1 then true else false end
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Whether the customer has made more than one purchase
+
+      - entity_var:
+          name: total_refund_amount_usd
+          select: coalesce(sum(refund_amount_usd), 0)
+          from: inputs/f_orders
+          where: order_status = 'completed'
+          description: Total refund amount in USD
+
+      - entity_var:
+          name: has_used_coupon
+          select: max(case when coupon_code is not null then true else false end)
+          from: inputs/f_orders
+          description: Whether the customer has ever used a coupon
+
+      # === Product Preferences ===
+      - entity_var:
+          name: total_unique_products
+          select: count(distinct product_id)
+          from: inputs/f_order_items
+          where: was_transacted_line_item = true
+          description: Number of unique products purchased
+
+      - entity_var:
+          name: total_unique_designers
+          select: count(distinct designer_id)
+          from: inputs/f_order_items
+          where: was_transacted_line_item = true
+          description: Number of unique designers purchased from
+
+      # === Design Theme Features (from enriched_order_items) ===
+      - entity_var:
+          name: favorite_theme
+          select: mode(THEME)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME IS NOT NULL
+          description: Most frequently purchased design theme
+
+      - entity_var:
+          name: favorite_theme_genre
+          select: mode(THEME_GENRE)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME_GENRE IS NOT NULL
+          description: Most frequently purchased theme genre
+
+      - entity_var:
+          name: unique_themes_purchased
+          select: count(distinct THEME)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME IS NOT NULL
+          description: Number of unique design themes purchased
+
+      - entity_var:
+          name: unique_theme_genres_purchased
+          select: count(distinct THEME_GENRE)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME_GENRE IS NOT NULL
+          description: Number of unique theme genres purchased
+
+      # === Product Attribute Features (from enriched_order_items) ===
+      - entity_var:
+          name: favorite_canvas_group
+          select: mode(CANVAS_GROUP)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND CANVAS_GROUP IS NOT NULL
+          description: Most frequently purchased canvas group (e.g., T-Shirts, Stickers)
+
+      - entity_var:
+          name: favorite_product_style
+          select: mode(PRODUCT_STYLE)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND PRODUCT_STYLE IS NOT NULL
+          description: Most frequently purchased product style
+
+      - entity_var:
+          name: favorite_product_color
+          select: mode(PRODUCT_COLOR)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND PRODUCT_COLOR IS NOT NULL
+          description: Most frequently purchased product color
+
+      - entity_var:
+          name: unique_canvas_groups_purchased
+          select: count(distinct CANVAS_GROUP)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND CANVAS_GROUP IS NOT NULL
+          description: Number of unique canvas groups purchased
+
+      - entity_var:
+          name: total_apparel_items
+          select: sum(ITEM_COUNT)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND IS_APPAREL = true
+          description: Total number of apparel items purchased
+
+      - entity_var:
+          name: total_non_apparel_items
+          select: sum(ITEM_COUNT)
+          from: models/enriched_order_items
+          where: WAS_TRANSACTED_LINE_ITEM = true AND IS_APPAREL = false
+          description: Total number of non-apparel items purchased
+
+      # === ID Stitching Features ===
+      - entity_var:
+          name: count_user_ids
+          select: count(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'user_id' AND other_id IS NOT NULL
+          description: Number of distinct user_id values (including customer_id from orders) merged into this profile
+
+      - entity_var:
+          name: count_anonymous_ids
+          select: count(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'anonymous_id' AND other_id IS NOT NULL
+          description: Number of distinct anonymous_id values merged into this profile

@@ -1,0 +1,130 @@
+# SQL Template Models for Complex Transformations
+# These models allow JOINs and transformations that can't be done in inputs.yaml
+
+models:
+  # Combined filtered identifies - excludes anonymous_ids that connect too many user_ids
+  # This prevents giant clusters from forming during ID stitching
+  #
+  # How it works:
+  #   1. Unions JS and Ruby identify events
+  #   2. Finds "super-connector" anonymous_ids (connecting to >5 distinct user_ids)
+  #   3. Excludes those anonymous_ids from the output
+  #
+  # Threshold: >5 distinct user_ids (balances filtering bots vs. legitimate multi-device users)
+  - name: filtered_identifies
+    model_type: sql_template
+    model_spec:
+      materialization:
+        output_type: ephemeral
+        run_type: discrete
+      single_sql: |
+        {% with js = this.DeRef("inputs/identifies_js") ruby = this.DeRef("inputs/identifies_ruby") %}
+        WITH
+        -- Union both JS and Ruby identify sources
+        -- Cast timestamp to TIMESTAMP_NTZ to handle mixed timezone types between sources
+        all_identifies AS (
+          SELECT anonymous_id, user_id, CAST(timestamp AS TIMESTAMP_NTZ) as timestamp FROM {{ js }}
+          UNION ALL
+          SELECT anonymous_id, user_id, CAST(timestamp AS TIMESTAMP_NTZ) as timestamp FROM {{ ruby }}
+        ),
+
+        -- Normalize user_ids (hash emails for consistent matching)
+        identifies_normalized AS (
+          SELECT
+            anonymous_id,
+            user_id,
+            timestamp,
+            CASE
+              WHEN user_id IS NOT NULL AND user_id != '' AND user_id LIKE '%@%'
+              THEN LOWER(SHA1(user_id))
+              WHEN user_id IS NOT NULL AND user_id != ''
+              THEN user_id
+              ELSE NULL
+            END as normalized_user_id
+          FROM all_identifies
+          WHERE anonymous_id IS NOT NULL
+            AND anonymous_id != ''
+            AND LEFT(anonymous_id, 2) != '#{' -- Filter template placeholders
+        ),
+
+        -- Find super-connector anonymous_ids (connecting to >5 distinct users)
+        problematic_anonymous_ids AS (
+          SELECT anonymous_id
+          FROM identifies_normalized
+          WHERE normalized_user_id IS NOT NULL
+          GROUP BY anonymous_id
+          HAVING COUNT(DISTINCT normalized_user_id) > 5
+        )
+
+        -- Return filtered results (excluding super-connectors)
+        SELECT i.anonymous_id, i.user_id, i.timestamp
+        FROM identifies_normalized i
+        LEFT JOIN problematic_anonymous_ids p ON i.anonymous_id = p.anonymous_id
+        WHERE p.anonymous_id IS NULL
+        {% endwith %}
+      occurred_at_col: timestamp
+      ids:
+        - select: "CASE WHEN user_id IS NOT NULL AND user_id != '' AND user_id LIKE '%@%' THEN LOWER(SHA1(user_id)) WHEN user_id IS NOT NULL AND user_id != '' THEN user_id ELSE NULL END"
+          type: user_id
+          entity: user
+        - select: "CASE WHEN anonymous_id IS NOT NULL AND anonymous_id != '' AND LENGTH(anonymous_id) >= 10 THEN anonymous_id ELSE NULL END"
+          type: anonymous_id
+          entity: user
+
+  # Enriched order items - joins f_order_items with dimension tables
+  # for design themes and product attributes
+  - name: enriched_order_items
+    model_type: sql_template
+    model_spec:
+      materialization:
+        output_type: ephemeral  # Not persisted, used as intermediate source
+        run_type: discrete
+      single_sql: |
+        {% with order_items = this.DeRef("inputs/f_order_items") designs = this.DeRef("inputs/dim_designs") products = this.DeRef("inputs/dim_products") %}
+        SELECT
+          -- All columns from order items
+          oi.ORDER_ITEM_ID,
+          oi.USER_KEY,
+          oi.ORDER_ID,
+          oi.CUSTOMER_ID,
+          oi.DESIGNER_ID,
+          oi.PRODUCT_ID,
+          oi.DESIGN_ID,
+          oi.ORDER_COMPLETED_AT_EST,
+          oi.ORDER_STATUS,
+          oi.WAS_TRANSACTED_LINE_ITEM,
+          oi.ITEM_COUNT,
+          oi.SALES_NOP_USD,
+          oi.SALES_SUBTOTAL_USD,
+          oi.UNIT_PRICE_USD,
+          oi.DISCOUNT_AMOUNT_USD,
+          oi.BILL_COUNTRY,
+          oi.CURRENCY_CODE,
+          oi.WAS_ON_SALE,
+          oi.SALE_TYPE,
+
+          -- From dim_designs: theme information
+          d.THEME,
+          d.THEME_GENRE,
+          d.CONTENT_CATEGORY_L1,
+          d.CONTENT_CATEGORY_L2,
+          d.CONTENT_PROPERTY,
+
+          -- From dim_products: product attributes
+          p.PRODUCT_CANVAS,
+          p.CANVAS_GROUP,
+          p.PRODUCT_STYLE,
+          p.PRODUCT_SIZE,
+          p.PRODUCT_COLOR,
+          p.IS_APPAREL,
+          p.PRODUCT_GENDER,
+          p.PRODUCT_TYPE
+
+        FROM {{ order_items }} oi
+        LEFT JOIN {{ designs }} d ON oi.DESIGN_ID = d.DESIGN_ID
+        LEFT JOIN {{ products }} p ON oi.PRODUCT_ID = p.PRODUCT_ID
+        {% endwith %}
+      ids:
+        - select: "CUSTOMER_ID"
+          type: user_id
+          entity: user

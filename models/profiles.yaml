@@ -196,3 +196,17 @@ var_groups:
           from: models/user_id_stitcher
           where: other_id_type = 'anonymous_id' AND other_id IS NOT NULL
           description: Number of distinct anonymous_id values merged into this profile
+
+      - entity_var:
+          name: all_user_ids
+          select: array_agg(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'user_id' AND other_id IS NOT NULL
+          description: Array of all user_id values merged into this profile
+
+      - entity_var:
+          name: all_anonymous_ids
+          select: array_agg(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'anonymous_id' AND other_id IS NOT NULL
+          description: Array of all anonymous_id values merged into this profile

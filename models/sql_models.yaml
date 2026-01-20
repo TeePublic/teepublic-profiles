@@ -3,14 +3,18 @@
 
 models:
   # Combined filtered identifies - excludes anonymous_ids that connect too many user_ids
+  # and user_ids that connect to too many anonymous_ids
   # This prevents giant clusters from forming during ID stitching
   #
   # How it works:
   #   1. Unions JS and Ruby identify events
-  #   2. Finds "super-connector" anonymous_ids (connecting to >5 distinct user_ids)
-  #   3. Excludes those anonymous_ids from the output
+  #   2. Finds "super-connector" anonymous_ids (connecting to >3 distinct user_ids)
+  #   3. Finds "super-connector" user_ids (connecting to >10 distinct anonymous_ids)
+  #   4. Excludes both types of super-connectors from the output
   #
-  # Threshold: >5 distinct user_ids (balances filtering bots vs. legitimate multi-device users)
+  # Thresholds:
+  #   - anonymous_id: >3 distinct user_ids (catches shared devices/bots)
+  #   - user_id: >10 distinct anonymous_ids (catches suspicious accounts)
   - name: filtered_identifies
     model_type: sql_template
     model_spec:
@@ -18,49 +22,72 @@ models:
         output_type: ephemeral
         run_type: discrete
       single_sql: |
-        {% with js = this.DeRef("inputs/identifies_js") ruby = this.DeRef("inputs/identifies_ruby") %}
+        {% with js = this.DeRef("inputs/identifies_js") ruby = this.DeRef("inputs/identifies_ruby") orders = this.DeRef("inputs/f_orders") %}
         WITH
         -- Union both JS and Ruby identify sources
         -- Cast timestamp to TIMESTAMP_NTZ to handle mixed timezone types between sources
         all_identifies AS (
-          SELECT anonymous_id, user_id, CAST(timestamp AS TIMESTAMP_NTZ) as timestamp FROM {{ js }}
+          SELECT anonymous_id, coalesce(email, user_id) as user_id, cast(timestamp as TIMESTAMP_NTZ) as timestamp FROM {{ js }}
           UNION ALL
-          SELECT anonymous_id, user_id, CAST(timestamp AS TIMESTAMP_NTZ) as timestamp FROM {{ ruby }}
+          SELECT anonymous_id, coalesce(email, user_id) as user_id, cast(timestamp as TIMESTAMP_NTZ) as timestamp FROM {{ ruby }}
         ),
 
         -- Normalize user_ids (hash emails for consistent matching)
-        identifies_normalized AS (
-          SELECT
-            anonymous_id,
-            user_id,
-            timestamp,
-            CASE
-              WHEN user_id IS NOT NULL AND user_id != '' AND user_id LIKE '%@%'
-              THEN LOWER(SHA1(user_id))
-              WHEN user_id IS NOT NULL AND user_id != ''
-              THEN user_id
-              ELSE NULL
-            END as normalized_user_id
-          FROM all_identifies
-          WHERE anonymous_id IS NOT NULL
-            AND anonymous_id != ''
-            AND LEFT(anonymous_id, 2) != '#{' -- Filter template placeholders
+        identifies_with_normalized_id AS (
+          select
+            anonymous_id
+            , user_id
+            , timestamp
+            , case
+                when user_id is not null and user_id != '' and user_id like '%@%'
+                  then lower(sha1(user_id))
+                when user_id is not null and user_id != ''
+                  then user_id
+                else null
+              end as normalized_user_id
+          from all_identifies
+          where anonymous_id is not null
+            and anonymous_id != ''
+            and left(anonymous_id, 2) != '#{' -- Filter template placeholders
         ),
 
-        -- Find super-connector anonymous_ids (connecting to >5 distinct users)
+        -- Filter to only SHA1 hashed values (40 chars)
+        identifies_normalized AS (
+          select *
+          from identifies_with_normalized_id
+          where len(normalized_user_id) = 40
+        ),
+
+        customers AS (
+          select
+            identifies_normalized.*
+          from identifies_normalized
+          where normalized_user_id in (select customer_id from {{ orders }})
+        ),        
+
+        -- Find super-connector anonymous_ids (connecting to >3 distinct users)
         problematic_anonymous_ids AS (
           SELECT anonymous_id
-          FROM identifies_normalized
-          WHERE normalized_user_id IS NOT NULL
+          FROM customers
           GROUP BY anonymous_id
-          HAVING COUNT(DISTINCT normalized_user_id) > 5
+          HAVING COUNT(DISTINCT normalized_user_id) > 3
+        ),
+
+        -- Find super-connector user_ids (connecting to >10 distinct anonymous_ids)
+        problematic_user_ids AS (
+          SELECT normalized_user_id
+          FROM customers
+          GROUP BY normalized_user_id
+          HAVING COUNT(DISTINCT anonymous_id) > 10
         )
 
-        -- Return filtered results (excluding super-connectors)
+        -- Return filtered results (excluding both types of super-connectors)
         SELECT i.anonymous_id, i.user_id, i.timestamp
-        FROM identifies_normalized i
-        LEFT JOIN problematic_anonymous_ids p ON i.anonymous_id = p.anonymous_id
-        WHERE p.anonymous_id IS NULL
+        FROM customers i
+        LEFT JOIN problematic_anonymous_ids pa ON i.anonymous_id = pa.anonymous_id
+        LEFT JOIN problematic_user_ids pu ON i.normalized_user_id = pu.normalized_user_id
+        WHERE pa.anonymous_id IS NULL
+          AND pu.normalized_user_id IS NULL
         {% endwith %}
       occurred_at_col: timestamp
       ids:

@@ -1,23 +1,45 @@
+# =============================================================================
 # RudderStack Profiles Project Configuration
+# =============================================================================
+# E-commerce customer profiles with ID stitching across web and server events.
+# Combines anonymous browsing sessions with known customer identities.
+
 name: ecommerce_profiles
 schema_version: 93
-connection: <your_connection_name>  # Update this - see README.md Setup section
+connection: your_connection_name  # Update with your profiles connection
 model_folders:
   - models
 
-# ID types used for identity stitching
+# =============================================================================
+# ID TYPES
+# =============================================================================
+# Identifiers used for identity resolution (ID stitching).
+# The id_stitcher connects these IDs to create unified customer profiles.
+
 id_types:
+  # Hashed customer email (SHA1) - primary known identifier
+  # Source: f_orders.customer_id, filtered_identifies (hashed email/user_id)
   - name: user_id
     filters:
       - type: exclude
         value: ""
-  - name: anonymous_id
-    # Filtering handled in models/sql_models.yaml (filtered_identifies model)
-    # - Empty strings filtered via: anonymous_id != ''
-    # - Template placeholders filtered via: LEFT(anonymous_id, 2) != '#{'
-    # - Super-connectors (>5 user_ids) filtered via: HAVING COUNT(DISTINCT normalized_user_id) > 5
 
-# Entity definitions
+  # Anonymous browser/device identifier (UUID)
+  # Source: RudderStack JS/Ruby SDK tracking
+  # Note: Additional filtering handled in sql_models.yaml (filtered_identifies):
+  #   - Empty/invalid anonymous_ids excluded
+  #   - Template placeholders (#{...) excluded
+  #   - Super-connectors excluded:
+  #     * anonymous_id -> >3 distinct user_ids (shared devices/bots)
+  #     * user_id -> >10 distinct anonymous_ids (suspicious accounts)
+  - name: anonymous_id
+
+# =============================================================================
+# ENTITIES
+# =============================================================================
+# Entity definitions for profile building.
+# Each entity represents a type of object we're building profiles for.
+
 entities:
   - name: user
     id_stitcher: models/user_id_stitcher
@@ -26,8 +48,13 @@ entities:
       - anonymous_id
     feature_views:
       using_ids:
+        # Primary feature view keyed by customer_id (SHA1 hashed email)
         - id: user_id
           name: with_customer_id
+
+# =============================================================================
+# DEPENDENCIES
+# =============================================================================
 
 python_requirements:
   - profiles-rudderstack==0.24.*

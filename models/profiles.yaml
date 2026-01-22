@@ -8,7 +8,6 @@ models:
       entity_key: user
       edge_sources:
         - from: inputs/f_orders
-        - from: inputs/f_order_items
         - from: models/filtered_identifies
 
 var_groups:
@@ -20,14 +19,12 @@ var_groups:
           name: total_orders
           select: count(distinct order_id)
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Total number of completed orders
 
       - entity_var:
           name: total_order_items
-          select: sum(item_count)
-          from: inputs/f_order_items
-          where: was_transacted_line_item = true
+          select: sum(ITEM_COUNT)
+          from: models/enriched_order_items
           description: Total number of items purchased
 
       # === Revenue Features ===
@@ -35,21 +32,12 @@ var_groups:
           name: lifetime_revenue_usd
           select: sum(total_revenue_usd)
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Total lifetime revenue in USD
-
-      - entity_var:
-          name: lifetime_sales_subtotal_usd
-          select: sum(sales_subtotal_usd)
-          from: inputs/f_orders
-          where: order_status = 'completed'
-          description: Total lifetime sales subtotal in USD
 
       - entity_var:
           name: avg_order_value_usd
           select: avg(total_revenue_usd)
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Average order value in USD
 
       # === Timing Features ===
@@ -57,37 +45,251 @@ var_groups:
           name: first_order_date
           select: min(order_completed_at_est)
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Date of first completed order
 
       - entity_var:
           name: last_order_date
           select: max(order_completed_at_est)
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Date of most recent completed order
 
+      # === Timeframe-Based Order Count Features ===
       - entity_var:
-          name: days_since_last_order
-          select: datediff(day, max(order_completed_at_est), current_date())
+          name: orders_within_1_day_of_first
+          select: count(*)
           from: inputs/f_orders
-          where: order_status = 'completed'
-          description: Number of days since last order
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1, {{user.first_order_date}})"
+          description: Number of orders placed within 1 day of first purchase
+
+      - entity_var:
+          name: orders_within_7_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 7, {{user.first_order_date}})"
+          description: Number of orders placed within 7 days of first purchase
+
+      - entity_var:
+          name: orders_within_14_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 14, {{user.first_order_date}})"
+          description: Number of orders placed within 14 days of first purchase
+
+      - entity_var:
+          name: orders_within_30_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 30, {{user.first_order_date}})"
+          description: Number of orders placed within 30 days of first purchase
+
+      - entity_var:
+          name: orders_within_60_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 60, {{user.first_order_date}})"
+          description: Number of orders placed within 60 days of first purchase
+
+      - entity_var:
+          name: orders_within_90_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 90, {{user.first_order_date}})"
+          description: Number of orders placed within 90 days of first purchase
+
+      - entity_var:
+          name: orders_within_180_days_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 180, {{user.first_order_date}})"
+          description: Number of orders placed within 180 days of first purchase
+
+      - entity_var:
+          name: orders_within_1_year_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 365, {{user.first_order_date}})"
+          description: Number of orders placed within 1 year of first purchase
+
+      - entity_var:
+          name: orders_within_2_years_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 730, {{user.first_order_date}})"
+          description: Number of orders placed within 2 years of first purchase
+
+      - entity_var:
+          name: orders_within_3_years_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1095, {{user.first_order_date}})"
+          description: Number of orders placed within 3 years of first purchase
+
+      - entity_var:
+          name: orders_within_4_years_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1460, {{user.first_order_date}})"
+          description: Number of orders placed within 4 years of first purchase
+
+      - entity_var:
+          name: orders_within_5_years_of_first
+          select: count(*)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1825, {{user.first_order_date}})"
+          description: Number of orders placed within 5 years of first purchase
+
+      # === Timeframe-Based Revenue Features ===
+      - entity_var:
+          name: revenue_within_1_day_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1, {{user.first_order_date}})"
+          description: Total revenue within 1 day of first purchase
+
+      - entity_var:
+          name: revenue_within_7_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 7, {{user.first_order_date}})"
+          description: Total revenue within 7 days of first purchase
+
+      - entity_var:
+          name: revenue_within_14_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 14, {{user.first_order_date}})"
+          description: Total revenue within 14 days of first purchase
+
+      - entity_var:
+          name: revenue_within_30_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 30, {{user.first_order_date}})"
+          description: Total revenue within 30 days of first purchase
+
+      - entity_var:
+          name: revenue_within_60_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 60, {{user.first_order_date}})"
+          description: Total revenue within 60 days of first purchase
+
+      - entity_var:
+          name: revenue_within_90_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 90, {{user.first_order_date}})"
+          description: Total revenue within 90 days of first purchase
+
+      - entity_var:
+          name: revenue_within_180_days_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 180, {{user.first_order_date}})"
+          description: Total revenue within 180 days of first purchase
+
+      - entity_var:
+          name: revenue_within_1_year_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 365, {{user.first_order_date}})"
+          description: Total revenue within 1 year of first purchase
+
+      - entity_var:
+          name: revenue_within_2_years_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 730, {{user.first_order_date}})"
+          description: Total revenue within 2 years of first purchase
+
+      - entity_var:
+          name: revenue_within_3_years_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1095, {{user.first_order_date}})"
+          description: Total revenue within 3 years of first purchase
+
+      - entity_var:
+          name: revenue_within_4_years_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1460, {{user.first_order_date}})"
+          description: Total revenue within 4 years of first purchase
+
+      - entity_var:
+          name: revenue_within_5_years_of_first
+          select: coalesce(sum(total_revenue_usd), 0)
+          from: inputs/f_orders
+          where: "ORDER_COMPLETED_AT_EST <= DATEADD(day, 1825, {{user.first_order_date}})"
+          description: Total revenue within 5 years of first purchase
+
+      # === Timeframe-Based Average Revenue Per Order Features ===
+      - entity_var:
+          name: avg_revenue_per_order_within_1_day_of_first
+          select: "{{user.revenue_within_1_day_of_first}} / NULLIF({{user.orders_within_1_day_of_first}}, 0)"
+          description: Average revenue per order within 1 day of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_7_days_of_first
+          select: "{{user.revenue_within_7_days_of_first}} / NULLIF({{user.orders_within_7_days_of_first}}, 0)"
+          description: Average revenue per order within 7 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_14_days_of_first
+          select: "{{user.revenue_within_14_days_of_first}} / NULLIF({{user.orders_within_14_days_of_first}}, 0)"
+          description: Average revenue per order within 14 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_30_days_of_first
+          select: "{{user.revenue_within_30_days_of_first}} / NULLIF({{user.orders_within_30_days_of_first}}, 0)"
+          description: Average revenue per order within 30 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_60_days_of_first
+          select: "{{user.revenue_within_60_days_of_first}} / NULLIF({{user.orders_within_60_days_of_first}}, 0)"
+          description: Average revenue per order within 60 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_90_days_of_first
+          select: "{{user.revenue_within_90_days_of_first}} / NULLIF({{user.orders_within_90_days_of_first}}, 0)"
+          description: Average revenue per order within 90 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_180_days_of_first
+          select: "{{user.revenue_within_180_days_of_first}} / NULLIF({{user.orders_within_180_days_of_first}}, 0)"
+          description: Average revenue per order within 180 days of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_1_year_of_first
+          select: "{{user.revenue_within_1_year_of_first}} / NULLIF({{user.orders_within_1_year_of_first}}, 0)"
+          description: Average revenue per order within 1 year of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_2_years_of_first
+          select: "{{user.revenue_within_2_years_of_first}} / NULLIF({{user.orders_within_2_years_of_first}}, 0)"
+          description: Average revenue per order within 2 years of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_3_years_of_first
+          select: "{{user.revenue_within_3_years_of_first}} / NULLIF({{user.orders_within_3_years_of_first}}, 0)"
+          description: Average revenue per order within 3 years of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_4_years_of_first
+          select: "{{user.revenue_within_4_years_of_first}} / NULLIF({{user.orders_within_4_years_of_first}}, 0)"
+          description: Average revenue per order within 4 years of first purchase
+
+      - entity_var:
+          name: avg_revenue_per_order_within_5_years_of_first
+          select: "{{user.revenue_within_5_years_of_first}} / NULLIF({{user.orders_within_5_years_of_first}}, 0)"
+          description: Average revenue per order within 5 years of first purchase
 
       # === Customer Behavior Features ===
       - entity_var:
           name: is_repeat_buyer
           select: case when count(distinct order_id) > 1 then true else false end
           from: inputs/f_orders
-          where: order_status = 'completed'
           description: Whether the customer has made more than one purchase
-
-      - entity_var:
-          name: total_refund_amount_usd
-          select: coalesce(sum(refund_amount_usd), 0)
-          from: inputs/f_orders
-          where: order_status = 'completed'
-          description: Total refund amount in USD
 
       - entity_var:
           name: has_used_coupon
@@ -98,101 +300,138 @@ var_groups:
       # === Product Preferences ===
       - entity_var:
           name: total_unique_products
-          select: count(distinct product_id)
-          from: inputs/f_order_items
-          where: was_transacted_line_item = true
+          select: count(distinct PRODUCT_ID)
+          from: models/enriched_order_items
           description: Number of unique products purchased
 
       - entity_var:
           name: total_unique_designers
-          select: count(distinct designer_id)
-          from: inputs/f_order_items
-          where: was_transacted_line_item = true
+          select: count(distinct DESIGNER_ID)
+          from: models/enriched_order_items
           description: Number of unique designers purchased from
+
+      - entity_var:
+          name: total_unique_designs
+          select: count(distinct DESIGN_ID)
+          from: models/enriched_order_items
+          description: Number of unique designs purchased          
 
       # === Design Theme Features (from enriched_order_items) ===
       - entity_var:
-          name: favorite_theme
-          select: mode(THEME)
+          name: favorite_design_theme
+          select: mode(design_theme)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME IS NOT NULL
+          where: design_theme IS NOT NULL
           description: Most frequently purchased design theme
 
       - entity_var:
-          name: favorite_theme_genre
-          select: mode(THEME_GENRE)
+          name: favorite_design_content
+          select: mode(design_content)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME_GENRE IS NOT NULL
-          description: Most frequently purchased theme genre
+          where: design_content IS NOT NULL
+          description: Most frequently purchased design content
 
       - entity_var:
-          name: unique_themes_purchased
-          select: count(distinct THEME)
+          name: unique_design_themes_purchased
+          select: count(distinct design_theme)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME IS NOT NULL
+          where: design_theme IS NOT NULL
           description: Number of unique design themes purchased
 
       - entity_var:
-          name: unique_theme_genres_purchased
-          select: count(distinct THEME_GENRE)
+          name: unique_design_contents_purchased
+          select: count(distinct design_content)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND THEME_GENRE IS NOT NULL
-          description: Number of unique theme genres purchased
+          where: design_content IS NOT NULL
+          description: Number of unique design content purchased
 
       # === Product Attribute Features (from enriched_order_items) ===
       - entity_var:
           name: favorite_canvas_group
           select: mode(CANVAS_GROUP)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND CANVAS_GROUP IS NOT NULL
-          description: Most frequently purchased canvas group (e.g., T-Shirts, Stickers)
+          where: CANVAS_GROUP IS NOT NULL
+          description: Most frequently purchased canvas group (e.g., Adult Apparel, Cases & Stickers)
+      
+      - entity_var:
+          name: favorite_canvas
+          select: mode(PRODUCT_CANVAS)
+          from: models/enriched_order_items
+          where: PRODUCT_CANVAS IS NOT NULL
+          description: Most frequently purchased canvas (e.g., T-Shirt, Hoodie, etc.)          
 
       - entity_var:
           name: favorite_product_style
           select: mode(PRODUCT_STYLE)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND PRODUCT_STYLE IS NOT NULL
+          where: PRODUCT_STYLE IS NOT NULL
           description: Most frequently purchased product style
+
+      - entity_var:
+          name: favorite_apparel_size
+          select: mode(PRODUCT_SIZE)
+          from: models/enriched_order_items
+          where: PRODUCT_SIZE IS NOT NULL and IS_APPAREL = true
+          description: Most frequently purchased apparel size     
+
+      - entity_var:
+          name: favorite_apparel_gender
+          select: mode(PRODUCT_GENDER)
+          from: models/enriched_order_items
+          where: PRODUCT_GENDER IS NOT NULL and IS_APPAREL = true
+          description: Most frequently purchased apparel gender                    
 
       - entity_var:
           name: favorite_product_color
           select: mode(PRODUCT_COLOR)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND PRODUCT_COLOR IS NOT NULL
+          where: PRODUCT_COLOR IS NOT NULL
           description: Most frequently purchased product color
 
       - entity_var:
           name: unique_canvas_groups_purchased
           select: count(distinct CANVAS_GROUP)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND CANVAS_GROUP IS NOT NULL
+          where: CANVAS_GROUP IS NOT NULL
           description: Number of unique canvas groups purchased
 
       - entity_var:
           name: total_apparel_items
-          select: sum(ITEM_COUNT)
+          select: coalesce(sum(case when IS_APPAREL = true then ITEM_COUNT else 0 end), 0)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND IS_APPAREL = true
           description: Total number of apparel items purchased
 
       - entity_var:
           name: total_non_apparel_items
-          select: sum(ITEM_COUNT)
+          select: coalesce(sum(case when IS_APPAREL = false then ITEM_COUNT else 0 end), 0)
           from: models/enriched_order_items
-          where: WAS_TRANSACTED_LINE_ITEM = true AND IS_APPAREL = false
           description: Total number of non-apparel items purchased
 
       # === ID Stitching Features ===
       - entity_var:
           name: count_user_ids
-          select: count(distinct other_id)
+          select: coalesce(count(distinct other_id), 0)
           from: models/user_id_stitcher
           where: other_id_type = 'user_id' AND other_id IS NOT NULL
           description: Number of distinct user_id values (including customer_id from orders) merged into this profile
 
       - entity_var:
           name: count_anonymous_ids
-          select: count(distinct other_id)
+          select: coalesce(count(distinct other_id), 0)
           from: models/user_id_stitcher
           where: other_id_type = 'anonymous_id' AND other_id IS NOT NULL
           description: Number of distinct anonymous_id values merged into this profile
+
+      - entity_var:
+          name: all_user_ids
+          select: array_agg(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'user_id' AND other_id IS NOT NULL
+          description: Array of all user_id values merged into this profile
+
+      - entity_var:
+          name: all_anonymous_ids
+          select: array_agg(distinct other_id)
+          from: models/user_id_stitcher
+          where: other_id_type = 'anonymous_id' AND other_id IS NOT NULL
+          description: Array of all anonymous_id values merged into this profile

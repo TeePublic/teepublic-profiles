@@ -1,7 +1,18 @@
+# =============================================================================
 # Input Sources for RudderStack Profiles
-# Defines the source tables and their identity mappings for ID stitching
+# =============================================================================
+# Defines source tables and their identity mappings for ID stitching.
+# These inputs are referenced by profiles.yaml features and sql_models.yaml.
 
 inputs:
+  # ===========================================================================
+  # TRANSACTIONAL DATA
+  # ===========================================================================
+  # Core order and order item tables from the warehouse.
+  # These are the primary sources for customer purchase behavior features.
+
+  # Orders - one row per order
+  # Used for: order counts, revenue, first/last order dates, etc.
   - name: f_orders
     app_defaults:
       table: WAREHOUSE.ANALYTICS.F_ORDERS_FILTERED_TP
@@ -12,6 +23,8 @@ inputs:
           entity: user
     where: is_manual_order = false
 
+  # Order Items - one row per line item
+  # Used for: item counts, product preferences, design/designer analysis
   - name: f_order_items
     app_defaults:
       table: WAREHOUSE.ANALYTICS.F_ORDER_ITEMS_FILTERED_TP
@@ -20,20 +33,36 @@ inputs:
         - select: "customer_id"
           type: user_id
           entity: user
+    where: was_transacted_line_item = true
 
-  # RudderStack identifies tables - used as source for filtered_identifies SQL model
-  # ID extraction is defined in sql_models.yaml, not here
+  # ===========================================================================
+  # IDENTITY DATA (RudderStack)
+  # ===========================================================================
+  # Identify events from RudderStack tracking.
+  # Used by filtered_identifies SQL model for ID stitching.
+  # Note: ID extraction logic is defined in sql_models.yaml, not here.
+
+  # JavaScript SDK identifies (web tracking)
   - name: identifies_js
     app_defaults:
-      table: rudderstack.marketplace_javascript_production.identifies
+      table: RUDDERSTACK.MARKETPLACE_JAVASCRIPT_PRODUCTION.IDENTIFIES
       occurred_at_col: timestamp
+    where: anonymous_id IS NOT NULL AND anonymous_id != '' AND LEFT(anonymous_id, 2) != '#{'
 
+  # Ruby SDK identifies (server-side tracking)
   - name: identifies_ruby
     app_defaults:
-      table: rudderstack.marketplace_ruby_production.identifies
+      table: RUDDERSTACK.MARKETPLACE_RUBY_PRODUCTION.IDENTIFIES
       occurred_at_col: timestamp
+    where: anonymous_id IS NOT NULL AND anonymous_id != '' AND LEFT(anonymous_id, 2) != '#{'
 
-  # Dimension tables for enriching order items
+  # ===========================================================================
+  # DIMENSION TABLES
+  # ===========================================================================
+  # Reference tables for enriching order items with product/design attributes.
+  # Used by enriched_order_items SQL model.
+
+  # Design metadata - themes and content categories
   - name: dim_designs
     app_defaults:
       table: WAREHOUSE.ANALYTICS.DIM_DESIGNS
@@ -41,6 +70,7 @@ inputs:
       is_optional: false
       is_event_stream: false
 
+  # Product metadata - canvas, size, color, apparel flags, etc.
   - name: dim_products
     app_defaults:
       table: WAREHOUSE.ANALYTICS.DIM_PRODUCTS

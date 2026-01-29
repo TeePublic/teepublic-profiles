@@ -6,7 +6,7 @@
 
 name: ecommerce_profiles
 schema_version: 93
-connection: your_connection_name  # Update with your profiles connection
+connection: profiles_poc_will_admin
 model_folders:
   - models
 
@@ -18,7 +18,7 @@ model_folders:
 
 id_types:
   # Hashed customer email (SHA1) - primary known identifier
-  # Source: f_orders.customer_id, filtered_identifies (hashed email/user_id)
+  # Source: orders.user_id (aliased from customer_id), filtered_identifies (hashed email/user_id)
   - name: user_id
     filters:
       - type: exclude
@@ -48,9 +48,9 @@ entities:
       - anonymous_id
     feature_views:
       using_ids:
-        # Primary feature view keyed by customer_id (SHA1 hashed email)
+        # Primary feature view keyed by user_id (SHA1 hashed email)
         - id: user_id
-          name: with_customer_id
+          name: with_user_id
 
 # =============================================================================
 # DEPENDENCIES

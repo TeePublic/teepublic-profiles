@@ -13,6 +13,7 @@ RudderStack Profiles project for building unified customer profiles with identit
 - [QA Guide: Identity Stitcher](#qa-guide-identity-stitcher)
 - [Troubleshooting Workflow](#troubleshooting-workflow)
 - [Configuration & Tuning](#configuration--tuning)
+- [Contributing](#contributing)
 - [Production Deployment](#production-deployment)
 
 ---
@@ -544,6 +545,34 @@ id_types:
       - type: exclude
         regex: "^specific-bad-id-pattern.*"
 ```
+
+---
+
+## Contributing
+
+All changes to `main` require a pull request with at least one approving review. Direct pushes to `main` are blocked.
+
+### Workflow
+
+1. Create a feature branch from `main`:
+   ```bash
+   git checkout -b your-branch-name
+   ```
+2. Make your changes and commit
+3. Push your branch and open a pull request:
+   ```bash
+   git push -u origin your-branch-name
+   gh pr create
+   ```
+4. Get at least one approval from a reviewer
+5. Merge via the GitHub UI
+
+### Branch Protections on `main`
+
+- **Pull request required** with 1 approval
+- **Stale reviews dismissed** when new commits are pushed
+- **Force pushes blocked**
+- **Branch deletion restricted**
 
 ---
 

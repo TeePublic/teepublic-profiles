@@ -13,7 +13,7 @@ inputs:
 
   # Orders - one row per order
   # Used for: order counts, revenue, first/last order dates, etc.
-  - name: f_orders
+  - name: orders
     app_defaults:
       table: WAREHOUSE.ANALYTICS.F_ORDERS_FILTERED_TP
       occurred_at_col: order_completed_at_est
@@ -25,7 +25,7 @@ inputs:
 
   # Order Items - one row per line item
   # Used for: item counts, product preferences, design/designer analysis
-  - name: f_order_items
+  - name: order_items
     app_defaults:
       table: WAREHOUSE.ANALYTICS.F_ORDER_ITEMS_FILTERED_TP
       occurred_at_col: order_completed_at_est
@@ -63,7 +63,7 @@ inputs:
   # Used by enriched_order_items SQL model.
 
   # Design metadata - themes and content categories
-  - name: dim_designs
+  - name: designs
     app_defaults:
       table: WAREHOUSE.ANALYTICS.DIM_DESIGNS
     contract:
@@ -71,7 +71,7 @@ inputs:
       is_event_stream: false
 
   # Product metadata - canvas, size, color, apparel flags, etc.
-  - name: dim_products
+  - name: products
     app_defaults:
       table: WAREHOUSE.ANALYTICS.DIM_PRODUCTS
     contract:

@@ -19,18 +19,27 @@ RudderStack Profiles project for building unified customer profiles with identit
 
 ## Setup
 
-Before running this project, you need to configure your own Snowflake connection. See the [Site Configuration docs](https://www.rudderstack.com/docs/profiles/get-started/site-configuration/) for detailed instructions.
+### Prerequisites
 
-### 1. Create a Connection
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) for Python and dependency management
+
+### 1. Install Dependencies
 
 ```bash
-# Initialize a new profiles connection
-pb init connection
+uv sync
 ```
 
-Follow the prompts to configure your Snowflake credentials. This creates a connection file in `~/.pb/siteconfig.yaml`.
+This installs Python 3.10 (if needed) and all dependencies into a `.venv`.
 
-### 2. Update pb_project.yaml
+### 2. Create a Connection
+
+```bash
+uv run pb init connection
+```
+
+Follow the prompts to configure your Snowflake credentials. This creates a connection file in `~/.pb/siteconfig.yaml`. See the [Site Configuration docs](https://www.rudderstack.com/docs/profiles/dev-docs/site-configuration-file/) for detailed instructions.
+
+### 3. Update pb_project.yaml
 
 Edit `pb_project.yaml` and set your connection name:
 
@@ -38,25 +47,10 @@ Edit `pb_project.yaml` and set your connection name:
 connection: <your_connection_name>
 ```
 
-### 3. Set Output Schema
-
-In `pb_project.yaml`, update the entity configuration to use your output schema:
-
-```yaml
-entities:
-  - name: user
-    # ... other config ...
-    feature_views:
-      using_ids:
-        - id: user_id
-          name: with_customer_id
-          # Output schema is derived from your connection's default database/schema
-```
-
-The output tables will be created in your connection's target schema. You can verify your output location after running with:
+Output tables are created in your connection's target schema. You can verify the output location with:
 
 ```bash
-pb show models -p . --migrate_on_load
+uv run pb show models
 ```
 
 ---
@@ -64,14 +58,11 @@ pb show models -p . --migrate_on_load
 ## Quick Start
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
-
 # Run full build
-pb run -p . --concurrency 10 --migrate_on_load
+uv run pb run
 
 # Run only ID stitcher (faster iteration when tuning)
-pb run -p . -m models/user_id_stitcher --concurrency 10 --migrate_on_load
+uv run pb run -m models/user_id_stitcher
 ```
 
 ---
@@ -80,6 +71,8 @@ pb run -p . -m models/user_id_stitcher --concurrency 10 --migrate_on_load
 
 ```
 profiles_project/
+├── pyproject.toml            # Python dependencies (managed by uv)
+├── .python-version           # Python version pin (3.10)
 ├── pb_project.yaml           # Project config, ID types, entity definitions
 ├── models/
 │   ├── inputs.yaml           # Data source definitions (6 sources)
@@ -87,7 +80,7 @@ profiles_project/
 │   └── sql_models.yaml       # SQL templates for filtered identifies & enriched order items
 ├── output/                   # Generated SQL artifacts (gitignored)
 ├── logs/                     # Run logs (gitignored)
-└── .venv/                    # Python virtual environment
+└── .venv/                    # Python virtual environment (gitignored, created by uv sync)
 ```
 
 ---
@@ -100,18 +93,18 @@ For a conceptual overview, see [How Profiles Works](https://www.rudderstack.com/
 
 ```
                     ┌─────────────────┐
-                    │  f_orders       │──────┐
+                    │  orders       │──────┐
                     │  (transactions) │      │
                     └─────────────────┘      │
                     ┌─────────────────┐      │    ┌──────────────────┐     ┌─────────────────────┐
-                    │  f_order_items  │──────┼───►│  ID STITCHER     │────►│  USER_ID_STITCHER   │
+                    │  order_items  │──────┼───►│  ID STITCHER     │────►│  USER_ID_STITCHER   │
                     │  (line items)   │      │    │  (identity       │     │  (identity graph)   │
                     └─────────────────┘      │    │   resolution)    │     └─────────────────────┘
 ┌─────────────────┐ ┌─────────────────┐      │    └────────┬─────────┘
 │  identifies_js  │►│ filtered_       │──────┘             │
 │  identifies_ruby│►│ identifies      │                    ▼
 └─────────────────┘ │ (super-connector│          ┌─────────────────────┐
-                    │  filtering)     │          │  WITH_CUSTOMER_ID   │
+                    │  filtering)     │          │  WITH_USER_ID   │
                     └─────────────────┘          │  (26 features)      │
                                                  └─────────────────────┘
 ```
@@ -120,18 +113,18 @@ For a conceptual overview, see [How Profiles Works](https://www.rudderstack.com/
 
 | Source | Table | Description |
 |--------|-------|-------------|
-| **f_orders** | `WAREHOUSE.ANALYTICS.F_ORDERS_FILTERED_TP` | Order transactions with revenue, dates, coupons |
-| **f_order_items** | `WAREHOUSE.ANALYTICS.F_ORDER_ITEMS_FILTERED_TP` | Line items with product/design details |
+| **orders** | `WAREHOUSE.ANALYTICS.F_ORDERS_FILTERED_TP` | Order transactions with revenue, dates, coupons |
+| **order_items** | `WAREHOUSE.ANALYTICS.F_ORDER_ITEMS_FILTERED_TP` | Line items with product/design details |
 | **identifies_js** | `rudderstack.marketplace_javascript_production.identifies` | JS SDK identify events |
 | **identifies_ruby** | `rudderstack.marketplace_ruby_production.identifies` | Ruby SDK identify events |
-| **dim_designs** | `WAREHOUSE.ANALYTICS.DIM_DESIGNS` | Design theme/genre lookup |
-| **dim_products** | `WAREHOUSE.ANALYTICS.DIM_PRODUCTS` | Product attributes lookup |
+| **designs** | `WAREHOUSE.ANALYTICS.DIM_DESIGNS` | Design theme/genre lookup |
+| **products** | `WAREHOUSE.ANALYTICS.DIM_PRODUCTS` | Product attributes lookup |
 
 ### ID Types
 
 | ID Type | Description | Sources |
 |---------|-------------|---------|
-| **user_id** | Customer identifier (SHA1 hashed if email) | Orders (customer_id), Identifies |
+| **user_id** | Customer identifier (SHA1 hashed if email) | Orders (user_id), Identifies |
 | **anonymous_id** | Browser/device identifier from RudderStack | Identifies only |
 
 ### Output Tables
@@ -141,7 +134,7 @@ These tables are created in your connection's output schema (run `pb show models
 | Table | Description |
 |-------|-------------|
 | **USER_ID_STITCHER** | Identity graph - maps all IDs to a canonical `user_main_id` |
-| **WITH_CUSTOMER_ID** | Feature view with 26 computed features, keyed by `user_id` |
+| **WITH_USER_ID** | Feature view with 26 computed features, keyed by `user_id` |
 
 > **Note**: In the SQL examples below, replace `<your_output_schema>` with your actual output schema (e.g., `DEV.MY_PROFILES`).
 
@@ -149,7 +142,7 @@ These tables are created in your connection's output schema (run `pb show models
 
 ## Features Computed
 
-This project computes 26 features using [Entity Variables](https://www.rudderstack.com/docs/profiles/feature-development/entity-vars/). All features are output to [Feature Views](https://www.rudderstack.com/docs/profiles/feature-development/feature-views/).
+This project computes 26 features using [Entity Variables](https://www.rudderstack.com/docs/profiles/concepts/features/). All features are output to [Feature Views](https://www.rudderstack.com/docs/profiles/concepts/feature-views/).
 
 ### Order & Revenue
 - `total_orders` - Count of completed orders
@@ -183,34 +176,28 @@ This project computes 26 features using [Entity Variables](https://www.ruddersta
 
 ## Running the Project
 
-See the [Profile Builder Commands](https://www.rudderstack.com/docs/profiles/get-started/commands/) for full CLI reference.
+See the [Profile Builder Commands](https://www.rudderstack.com/docs/profiles/dev-docs/commands/) for full CLI reference.
 
 ```bash
-# Activate environment first
-source .venv/bin/activate
-
 # Full run (ID stitcher + all features)
-pb run -p . --concurrency 10 --migrate_on_load
-
+uv run pb run
 # ID stitcher only (faster - use when tuning identity resolution)
-pb run -p . -m models/user_id_stitcher --concurrency 10 --migrate_on_load
-
+uv run pb run -m models/user_id_stitcher
 # Resume from a specific sequence number
-pb run -p . --seq_no <N> --concurrency 10 --migrate_on_load
-
+uv run pb run --seq_no <N>
 # Show what would be built (dry run / inspect models)
-pb show models -p . --migrate_on_load
+uv run pb show models
 ```
 
 ---
 
 ## QA Guide: Identity Stitcher
 
-This section explains how to validate the identity stitcher is working correctly, investigate why IDs got merged, and identify potential issues. For background on how identity resolution works, see the [Identity Graph documentation](https://www.rudderstack.com/docs/profiles/identity-resolution/identity-graph/).
+This section explains how to validate the identity stitcher is working correctly, investigate why IDs got merged, and identify potential issues. For background on how identity resolution works, see the [Identity Graph documentation](https://www.rudderstack.com/docs/profiles/concepts/identity-graph/).
 
 ### Key Concepts
 
-**Identity Graph Structure**: The `USER_ID_STITCHER` table maps every identifier to a canonical `user_main_id` (see [ID Stitcher Model](https://www.rudderstack.com/docs/profiles/identity-resolution/id-stitcher/)):
+**Identity Graph Structure**: The `USER_ID_STITCHER` table maps every identifier to a canonical `user_main_id` (see [ID Stitcher Model](https://www.rudderstack.com/docs/profiles/dev-docs/profiles-yaml/id-stitcher/)):
 
 | Column | Description |
 |--------|-------------|
@@ -388,7 +375,7 @@ SELECT
   lifetime_revenue_usd,
   first_order_date,
   last_order_date
-FROM <your_output_schema>.WITH_CUSTOMER_ID
+FROM <your_output_schema>.WITH_USER_ID
 WHERE count_user_ids > 5  -- Multiple user_ids merged
    OR count_anonymous_ids > 100  -- Too many devices
    OR lifetime_revenue_usd > 100000  -- Unusually high (adjust threshold)
@@ -411,7 +398,7 @@ SELECT
   is_repeat_buyer,
   first_order_date,
   last_order_date
-FROM <your_output_schema>.WITH_CUSTOMER_ID
+FROM <your_output_schema>.WITH_USER_ID
 WHERE count_anonymous_ids BETWEEN 2 AND 5  -- Reasonable multi-device users
   AND total_orders > 0
 ORDER BY RANDOM()
@@ -427,7 +414,7 @@ LIMIT 20;
 | Symptom | Where to Look | What to Do |
 |---------|---------------|------------|
 | Large clusters exist | Profile data (USER_ID_STITCHER) | Identify the cluster, then go to source |
-| Feature values look wrong | Profile data (WITH_CUSTOMER_ID) | Check count_user_ids/count_anonymous_ids first |
+| Feature values look wrong | Profile data (WITH_USER_ID) | Check count_user_ids/count_anonymous_ids first |
 | Need to understand WHY ids merged | **Source data** (identifies tables) | Trace the specific edges that connected IDs |
 | Finding bridge IDs | **Source data** | Run bridge ID queries on raw identifies |
 | Validating a fix | Profile data (after re-run) | Check cluster stats improved |
@@ -521,10 +508,10 @@ For detailed configuration reference, see the [Profiles documentation](https://w
 
 | File | What to Edit | Docs |
 |------|--------------|------|
-| `models/sql_models.yaml` | Super-connector threshold (`HAVING COUNT(...) > N`) | [SQL Models](https://www.rudderstack.com/docs/profiles/feature-development/sql-models/) |
-| `pb_project.yaml` | Hardcoded ID exclusions, ID type definitions | [pb_project.yaml](https://www.rudderstack.com/docs/profiles/get-started/pb-project/) |
-| `models/inputs.yaml` | Source table definitions, ID mappings | [inputs.yaml](https://www.rudderstack.com/docs/profiles/get-started/inputs-yaml/) |
-| `models/profiles.yaml` | ID stitcher edge sources, feature definitions | [profiles.yaml](https://www.rudderstack.com/docs/profiles/get-started/profiles-yaml/) |
+| `models/sql_models.yaml` | Super-connector threshold (`HAVING COUNT(...) > N`) | [SQL Models](https://www.rudderstack.com/docs/profiles/concepts/sql-models/) |
+| `pb_project.yaml` | Hardcoded ID exclusions, ID type definitions | [pb_project.yaml](https://www.rudderstack.com/docs/profiles/dev-docs/pb-project-yaml/) |
+| `models/inputs.yaml` | Source table definitions, ID mappings | [inputs.yaml](https://www.rudderstack.com/docs/profiles/dev-docs/inputs-yaml/) |
+| `models/profiles.yaml` | ID stitcher edge sources, feature definitions | [profiles.yaml](https://www.rudderstack.com/docs/profiles/dev-docs/profiles-yaml/) |
 
 ### Current Filtering Strategy
 
@@ -560,134 +547,6 @@ id_types:
 
 ---
 
-## Production Deployment
-
-This section covers how to deploy this profiles project to the RudderStack platform for scheduled, automated runs. See the [Profiles FAQ](https://www.rudderstack.com/docs/profiles/faq/) for common deployment questions.
-
-### Prerequisites
-
-Before deploying to production:
-
-1. **QA the identity stitcher** - Follow the [QA Guide](#qa-guide-identity-stitcher) to validate cluster sizes and stitching quality
-2. **Test locally** - Run `pb run` successfully with your connection
-3. **Push to GitHub** - The project must be in a Git repository (GitHub, GitLab, or BitBucket supported)
-
-### Step 1: Push Project to GitHub
-
-```bash
-# Initialize git if not already done
-git init
-
-# Add all files
-git add .
-
-# Commit
-git commit -m "Initial profiles project"
-
-# Add remote and push
-git remote add origin git@github.com:<your-org>/<repo-name>.git
-git push -u origin main
-```
-
-**Important**: Make sure sensitive files are excluded. The `.gitignore` should include:
-- `.venv/`
-- `output/`
-- `logs/`
-- Any local siteconfig files
-
-### Step 2: Configure Warehouse Destination in RudderStack
-
-Before importing the project, you need a warehouse destination configured in your RudderStack workspace:
-
-1. Go to **RudderStack Dashboard** → **Destinations**
-2. Add a **Snowflake** destination (or your warehouse type)
-3. Configure with credentials that have:
-   - **Read access** to source schemas (`WAREHOUSE.ANALYTICS`, `rudderstack`)
-   - **Write access** to output schema for profiles tables
-
-### Step 3: Create Profiles Project in RudderStack Dashboard
-
-1. Go to **RudderStack Dashboard** → **Profiles**
-2. Click **Create Profile**
-3. Select **Import from Git**
-4. Enter your repository URL:
-   ```
-   https://github.com/<your-org>/<repo-name>
-   ```
-   Or for a specific branch:
-   ```
-   https://github.com/<your-org>/<repo-name>/tree/<branch-name>
-   ```
-5. Authenticate with GitHub (RudderStack will provide an SSH key to add to your repo)
-6. Select the **warehouse destination** configured in Step 2
-7. Click **Validate** to verify the project compiles successfully
-
-### Step 4: Configure Schedule
-
-Once the project is imported:
-
-1. Go to your Profiles project **Settings**
-2. Set the **Run Schedule** (e.g., daily, hourly)
-3. Configure **Concurrency** (Snowflake only) - recommend `10` for this project
-4. Enable the schedule
-
-### Step 5: Deploy and Monitor
-
-1. Click **Run Now** to trigger an initial run
-2. Monitor the run in the **Runs** tab
-3. Check your warehouse for output tables once complete
-
-### Git Branch Strategy for Dev/Prod
-
-RudderStack supports different Git branches for different environments:
-
-| Environment | Branch | URL Format |
-|-------------|--------|------------|
-| Development | `dev` | `https://github.com/org/repo/tree/dev` |
-| Production | `main` | `https://github.com/org/repo/tree/main` |
-
-You can create separate Profiles projects in RudderStack pointing to different branches, each with their own:
-- Output schema (dev vs prod)
-- Run schedule
-- Warehouse credentials
-
-### Keeping Projects in Sync
-
-The RudderStack dashboard project syncs with your Git repository:
-
-1. **Push changes to GitHub** → Changes are automatically picked up on next run
-2. **Manual sync** → Go to project settings and click "Sync" to pull latest changes immediately
-
-### Supported Git URL Formats
-
-```
-# Branch
-https://github.com/<org>/<repo>/tree/<branch-name>
-
-# Tag
-https://github.com/<org>/<repo>/tag/<tag-name>
-
-# Specific commit
-https://github.com/<org>/<repo>/commit/<commit-hash>
-
-# Subdirectory (if project is in a subfolder)
-https://github.com/<org>/<repo>/tree/<branch>/path/to/project
-```
-
-### Production Checklist
-
-Before enabling the production schedule:
-
-- [ ] Identity stitcher QA complete (cluster sizes acceptable)
-- [ ] All features validated and returning expected values
-- [ ] Super-connector threshold tuned appropriately
-- [ ] Warehouse credentials have correct read/write permissions
-- [ ] Output schema is the correct production schema
-- [ ] Schedule frequency matches data freshness requirements
-- [ ] Alerting/monitoring configured for failed runs
-
----
-
 ## Connection Details
 
 Configure your connection in `pb_project.yaml`. See [Setup](#setup) for instructions.
@@ -702,36 +561,11 @@ Configure your connection in `pb_project.yaml`. See [Setup](#setup) for instruct
 
 ### RudderStack Profiles Documentation
 
-**Getting Started**
-- [Profiles Overview](https://www.rudderstack.com/docs/profiles/overview/) - Introduction to RudderStack Profiles
-- [How Profiles Works](https://www.rudderstack.com/docs/profiles/how-profiles-works/) - Identity graphs and feature computation
-- [Quickstart Guide](https://www.rudderstack.com/docs/profiles/get-started/quickstart/) - Create your first profiles project
+For full documentation, see [RudderStack Profiles Docs](https://www.rudderstack.com/docs/profiles/).
 
-**Configuration**
-- [pb_project.yaml](https://www.rudderstack.com/docs/profiles/get-started/pb-project/) - Project configuration reference
-- [inputs.yaml](https://www.rudderstack.com/docs/profiles/get-started/inputs-yaml/) - Define data sources
-- [profiles.yaml](https://www.rudderstack.com/docs/profiles/get-started/profiles-yaml/) - Define models and features
-
-**Identity Resolution**
-- [Identity Graph](https://www.rudderstack.com/docs/profiles/identity-resolution/identity-graph/) - Understanding identity graphs
-- [ID Stitcher Model](https://www.rudderstack.com/docs/profiles/identity-resolution/id-stitcher/) - Configure identity stitching
-- [ID Types](https://www.rudderstack.com/docs/profiles/identity-resolution/id-types/) - Define and configure ID types
-
-**Features**
-- [Entity Variables](https://www.rudderstack.com/docs/profiles/feature-development/entity-vars/) - Define computed features
-- [Feature Views](https://www.rudderstack.com/docs/profiles/feature-development/feature-views/) - Output feature tables
-- [SQL Models](https://www.rudderstack.com/docs/profiles/feature-development/sql-models/) - Custom SQL templates
-
-**CLI Reference**
-- [Profile Builder Commands](https://www.rudderstack.com/docs/profiles/get-started/commands/) - Full CLI command reference
-- [Run Profiles Project](https://www.rudderstack.com/docs/profiles/get-started/run-profiles-project/) - Compile and run commands
-
-**Operations**
-- [Warehouse Output](https://www.rudderstack.com/docs/profiles/get-started/warehouse-output/) - Output tables and views
-- [Site Configuration](https://www.rudderstack.com/docs/profiles/get-started/site-configuration/) - Connection and credentials setup
-- [FAQ](https://www.rudderstack.com/docs/profiles/faq/) - Common questions and troubleshooting
+For AI-assisted project development, see the [Profiles MCP Server](https://github.com/rudderlabs/profiles-mcp).
 
 ### Local Resources
-- Run `pb --help` for CLI options
-- Run `pb help <command>` for command-specific help
+- Run `uv run pb --help` for CLI options
+- Run `uv run pb help <command>` for command-specific help
 - Check `logs/` directory for detailed run logs

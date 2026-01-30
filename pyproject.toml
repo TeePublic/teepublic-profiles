@@ -1,0 +1,8 @@
+[project]
+name = "teepublic-profiles"
+version = "0.1.0"
+description = "RudderStack Profiles project for TeePublic customer identity resolution"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "profiles-rudderstack",
+]
